@@ -1,0 +1,68 @@
+import hashlib
+
+from orchestrator.config import Settings
+from orchestrator.exceptions import ServiceError, UpstreamError
+
+
+DEFAULT_CONTENT = b"%PDF-1.4 hola contenido"
+DEFAULT_CHECKSUM = hashlib.sha256(DEFAULT_CONTENT).hexdigest()
+
+VALIDATOR_400_EXT = "Solo se permiten archivos PDF"
+VALIDATOR_400_HEADER = "El archivo no es un PDF válido"
+OVERSIZE_MSG = "El archivo excede el tamaño permitido"
+EXTRACTION_422 = "No se pudo leer el archivo como PDF"
+REPEATED_MSG = "El PDF ya se encuentra repetido en la base de datos."
+UPLOAD_OK_MSG = "PDF subido correctamente"
+
+
+def make_settings(**overrides):
+    defaults = {
+        "http_retries": 3,
+        "http_retry_backoff": 0.5,
+        "http_timeout": 5.0,
+        "max_upload_size": 10 * 1024 * 1024,
+        "validator_service_url": "http://validator:8001",
+        "extractor_service_url": "http://extractor:8002",
+        "store_service_url": "http://store:8003",
+    }
+    defaults.update(overrides)
+    return Settings(_env_file=None, **defaults)
+
+
+class FakeValidator:
+    def __init__(self, result=None, error=None):
+        self.result = {"valid": True} if result is None else result
+        self.error = error
+        self.calls = []
+
+    async def validate(self, file_bytes, filename):
+        self.calls.append((file_bytes, filename))
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+class FakeExtractor:
+    def __init__(self, result=None, error=None):
+        self.result = {"text": "texto extraido"} if result is None else result
+        self.error = error
+        self.calls = []
+
+    async def extract(self, file_bytes, filename):
+        self.calls.append((file_bytes, filename))
+        if self.error is not None:
+            raise self.error
+        return self.result
+
+
+class FakeStore:
+    def __init__(self, result=None, error=None):
+        self.result = {"id": "abc123"} if result is None else result
+        self.error = error
+        self.calls = []
+
+    async def store(self, name, text, checksum):
+        self.calls.append((name, text, checksum))
+        if self.error is not None:
+            raise self.error
+        return self.result
