@@ -1,8 +1,6 @@
 import hashlib
 
 from orchestrator.config import Settings
-from orchestrator.exceptions import ServiceError, UpstreamError
-
 
 DEFAULT_CONTENT = b"%PDF-1.4 hola contenido"
 DEFAULT_CHECKSUM = hashlib.sha256(DEFAULT_CONTENT).hexdigest()

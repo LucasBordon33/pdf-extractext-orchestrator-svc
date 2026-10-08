@@ -1,11 +1,6 @@
 import hashlib
 
 import pytest
-
-from orchestrator.controllers.upload_controller import UploadController
-from orchestrator.exceptions import BusinessRejection, ServiceError, UpstreamError
-from orchestrator.models.pipeline import StageStatus
-
 from helpers import (
     DEFAULT_CHECKSUM,
     DEFAULT_CONTENT,
@@ -19,6 +14,10 @@ from helpers import (
     FakeValidator,
     make_settings,
 )
+
+from orchestrator.controllers.upload_controller import UploadController
+from orchestrator.exceptions import BusinessRejection, ServiceError, UpstreamError
+from orchestrator.models.pipeline import StageStatus
 
 
 @pytest.mark.asyncio
@@ -86,7 +85,8 @@ async def test_validator_valid_false_reason_is_business_400():
 @pytest.mark.asyncio
 async def test_extractor_422_is_business_rejection():
     extractor = FakeExtractor(error=ServiceError(422, EXTRACTION_422))
-    controller = UploadController(FakeValidator(), extractor, FakeStore(), make_settings())
+    store = FakeStore()
+    controller = UploadController(FakeValidator(), extractor, store, make_settings())
 
     with pytest.raises(BusinessRejection) as exc_info:
         await controller.handle_upload("file.pdf", DEFAULT_CONTENT)

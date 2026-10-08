@@ -4,6 +4,13 @@ import json
 
 import httpx
 import pytest
+from helpers import (
+    DEFAULT_CONTENT,
+    EXTRACTION_422,
+    REPEATED_MSG,
+    VALIDATOR_400_EXT,
+    make_settings,
+)
 
 from orchestrator.exceptions import ServiceError, UpstreamError
 from orchestrator.services.service_clients import (
@@ -11,14 +18,6 @@ from orchestrator.services.service_clients import (
     ServiceClient,
     StoreClient,
     ValidatorClient,
-)
-
-from helpers import (
-    DEFAULT_CONTENT,
-    EXTRACTION_422,
-    REPEATED_MSG,
-    VALIDATOR_400_EXT,
-    make_settings,
 )
 
 
