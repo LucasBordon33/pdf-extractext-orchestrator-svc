@@ -1,3 +1,4 @@
+import base64
 import json
 import time
 
@@ -89,15 +90,13 @@ def test_request_carries_business_code_from_4xx_body():
     assert exc_info.value.code == "REPEATED"
 
 
-def test_validator_client_sends_multipart_bytes_and_filename():
-    captured = {}
-
+def test_validator_client_sends_json_base64_content():
     def handler(request):
         assert request.method == "POST"
         assert str(request.url).endswith("/validate")
-        assert b"DEFAULT" in request.content or b"%PDF-" in request.content
-        assert b'doc.pdf' in request.content
-        captured["content"] = request.content
+        body = json.loads(request.content)
+        assert body["name"] == "doc.pdf"
+        assert base64.b64decode(body["content_base64"]) == DEFAULT_CONTENT
         return httpx.Response(200, json={"valid": True})
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
@@ -106,7 +105,6 @@ def test_validator_client_sends_multipart_bytes_and_filename():
     result = validator.validate(DEFAULT_CONTENT, "doc.pdf")
 
     assert result == {"valid": True}
-    assert DEFAULT_CONTENT in captured["content"]
 
 
 def test_validator_client_400_raises_business_error():
