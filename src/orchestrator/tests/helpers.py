@@ -33,7 +33,7 @@ class FakeValidator:
         self.error = error
         self.calls = []
 
-    async def validate(self, file_bytes, filename):
+    def validate(self, file_bytes, filename):
         self.calls.append((file_bytes, filename))
         if self.error is not None:
             raise self.error
@@ -42,11 +42,11 @@ class FakeValidator:
 
 class FakeExtractor:
     def __init__(self, result=None, error=None):
-        self.result = {"text": "texto extraido"} if result is None else result
+        self.result = {"content": "texto extraido", "page_count": 1} if result is None else result
         self.error = error
         self.calls = []
 
-    async def extract(self, file_bytes, filename):
+    def extract(self, file_bytes, filename):
         self.calls.append((file_bytes, filename))
         if self.error is not None:
             raise self.error
@@ -59,7 +59,7 @@ class FakeStore:
         self.error = error
         self.calls = []
 
-    async def store(self, name, text, checksum):
+    def store(self, name, text, checksum):
         self.calls.append((name, text, checksum))
         if self.error is not None:
             raise self.error
