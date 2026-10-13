@@ -2,7 +2,9 @@
 
 from typing import Literal
 
-RejectionKind = Literal["VALIDATION_ERROR", "EXTRACTION_ERROR", "DUPLICATE_DOCUMENT"]
+RejectionKind = Literal[
+    "VALIDATION_ERROR", "EXTRACTION_ERROR", "DUPLICATE_DOCUMENT", "NOT_FOUND"
+]
 
 
 class ServiceError(Exception):

@@ -36,7 +36,7 @@ class ExtractorPort(Protocol):
 class StorePort(Protocol):
     """Etapa 3: persiste el PDF."""
 
-    def store(self, name: str, text: str, checksum: str) -> dict[str, Any]: ...
+    def store(self, name: str, text: str, checksum: str, size: int = 0) -> dict[str, Any]: ...
 
 
 def _rejection_from_validator(exc: ServiceError) -> Exception:
@@ -56,8 +56,8 @@ def _rejection_from_extractor(exc: ServiceError) -> Exception:
 
 
 def _rejection_from_store(exc: ServiceError) -> Exception:
-    if exc.code == "REPEATED" or exc.status_code == 409:
-        return BusinessRejection(exc.detail, "DUPLICATE_DOCUMENT", exc.status_code)
+    if exc.code == "DUPLICATE_DOCUMENT" or exc.status_code == 409:
+        return BusinessRejection(exc.detail, "DUPLICATE_DOCUMENT", 400)
     return PipelineError(exc.detail)
 
 
@@ -84,7 +84,7 @@ class UploadController:
         result = PipelineResult()
         self._run_validate(content, name, result)
         text = self._run_extract(content, name, result)
-        stored = self._run_store(name, text, checksum, result)
+        stored = self._run_store(name, text, checksum, len(content), result)
         result.finalize()
         return PDF(id=stored["id"], name=name, text=text, checksum=checksum), result
 
@@ -116,11 +116,11 @@ class UploadController:
         return str(payload["content"])
 
     def _run_store(
-        self, name: str, text: str, checksum: str, result: PipelineResult
+        self, name: str, text: str, checksum: str, size: int, result: PipelineResult
     ) -> dict[str, Any]:
         stage = result.start_stage(_STORE_STAGE)
         try:
-            stored = self._store.store(name, text, checksum)
+            stored = self._store.store(name, text, checksum, size)
         except UpstreamError:
             raise
         except ServiceError as exc:

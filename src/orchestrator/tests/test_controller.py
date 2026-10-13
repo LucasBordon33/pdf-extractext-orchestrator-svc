@@ -36,7 +36,7 @@ def test_full_pipeline_success_computes_checksum_and_sanitizes_name():
     assert result.overall is StageStatus.SUCCEEDED
     assert validator.calls == [(content, "doc.pdf")]
     assert extractor.calls == [(content, "doc.pdf")]
-    assert store.calls == [("doc.pdf", "texto extraido", DEFAULT_CHECKSUM)]
+    assert store.calls == [("doc.pdf", "texto extraido", DEFAULT_CHECKSUM, len(content))]
 
 
 def test_pipeline_runs_stages_in_strict_order():
@@ -91,8 +91,8 @@ def test_extractor_422_is_business_rejection():
     assert store.calls == []
 
 
-def test_store_repeated_400_is_business_duplicate():
-    store = FakeStore(error=ServiceError(400, REPEATED_MSG, code="REPEATED"))
+def test_store_duplicate_409_is_business_duplicate():
+    store = FakeStore(error=ServiceError(409, REPEATED_MSG, code="DUPLICATE_DOCUMENT"))
     controller = UploadController(FakeValidator(), FakeExtractor(), store, make_settings())
 
     with pytest.raises(BusinessRejection) as exc_info:

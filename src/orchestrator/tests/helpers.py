@@ -10,7 +10,20 @@ VALIDATOR_400_HEADER = "El archivo no es un PDF válido"
 OVERSIZE_MSG = "El archivo excede el tamaño permitido"
 EXTRACTION_422 = "No se pudo leer el archivo como PDF"
 REPEATED_MSG = "El PDF ya se encuentra repetido en la base de datos."
+NOT_FOUND_MSG = "Documento no encontrado"
 UPLOAD_OK_MSG = "PDF subido correctamente"
+
+DUPLICATE_CODE = "DUPLICATE_DOCUMENT"
+
+DOCUMENT_ID = "abc123"
+DOCUMENT_PAYLOAD = {
+    "id": DOCUMENT_ID,
+    "name": "doc.pdf",
+    "checksum": DEFAULT_CHECKSUM,
+    "content": "texto extraido",
+    "size": len(DEFAULT_CONTENT),
+    "created_at": "2026-10-09T12:30:00Z",
+}
 
 
 def make_settings(**overrides):
@@ -54,13 +67,33 @@ class FakeExtractor:
 
 
 class FakeStore:
-    def __init__(self, result=None, error=None):
+    def __init__(self, result=None, error=None, document=None, documents=None):
         self.result = {"id": "abc123"} if result is None else result
         self.error = error
+        self.document = document
+        self.documents = documents if documents is not None else []
         self.calls = []
 
-    def store(self, name, text, checksum):
-        self.calls.append((name, text, checksum))
+    def store(self, name, text, checksum, size=0):
+        self.calls.append((name, text, checksum, size))
         if self.error is not None:
             raise self.error
         return self.result
+
+    def get_by_id(self, doc_id):
+        self.calls.append(("get_by_id", doc_id))
+        if self.error is not None:
+            raise self.error
+        return self.document
+
+    def get_by_checksum(self, checksum):
+        self.calls.append(("get_by_checksum", checksum))
+        if self.error is not None:
+            raise self.error
+        return self.document
+
+    def list_all(self):
+        self.calls.append(("list_all",))
+        if self.error is not None:
+            raise self.error
+        return self.documents

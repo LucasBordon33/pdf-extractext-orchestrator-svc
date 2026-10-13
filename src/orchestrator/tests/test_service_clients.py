@@ -79,15 +79,15 @@ def test_request_never_retries_4xx():
 
 def test_request_carries_business_code_from_4xx_body():
     def handler(request):
-        return httpx.Response(409, json={"detail": REPEATED_MSG, "code": "REPEATED"})
+        return httpx.Response(409, json={"detail": REPEATED_MSG, "code": "DUPLICATE_DOCUMENT"})
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
 
     with pytest.raises(ServiceError) as exc_info:
-        client.request("GET", "http://store:8003/pdfs")
+        client.request("GET", "http://store:8003/api/v1/documents")
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.code == "REPEATED"
+    assert exc_info.value.code == "DUPLICATE_DOCUMENT"
 
 
 def test_validator_client_sends_json_base64_content():
@@ -157,28 +157,40 @@ def test_extractor_client_422_raises_business_error():
 def test_store_client_posts_json_contract():
     def handler(request):
         assert request.method == "POST"
-        assert str(request.url).endswith("/pdfs")
+        assert str(request.url).endswith("/api/v1/store")
         assert json.loads(request.content) == {
             "name": "doc.pdf",
             "text": "hola",
             "checksum": "sha123",
+            "size": 0,
         }
-        return httpx.Response(201, json={"id": "abc123"})
+        return httpx.Response(201, json={"id": "abc123", "checksum": "sha123"})
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
     store = StoreClient(client, "http://store:8003")
 
     result = store.store("doc.pdf", "hola", "sha123")
 
-    assert result == {"id": "abc123"}
+    assert result == {"id": "abc123", "checksum": "sha123"}
 
 
-def test_store_400_repeated_on_first_attempt_is_business_error():
+def test_store_client_sends_size_when_provided():
+    def handler(request):
+        assert json.loads(request.content)["size"] == len(DEFAULT_CONTENT)
+        return httpx.Response(201, json={"id": "abc123"})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    store.store("doc.pdf", "hola", "sha123", len(DEFAULT_CONTENT))
+
+
+def test_store_409_duplicate_on_first_attempt_is_business_error():
     requests_seen = []
 
     def handler(request):
         requests_seen.append(str(request.url))
-        return httpx.Response(400, json={"detail": REPEATED_MSG, "code": "REPEATED"})
+        return httpx.Response(409, json={"error_code": "DUPLICATE_DOCUMENT", "message": REPEATED_MSG})
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
     store = StoreClient(client, "http://store:8003")
@@ -186,12 +198,12 @@ def test_store_400_repeated_on_first_attempt_is_business_error():
     with pytest.raises(ServiceError) as exc_info:
         store.store("doc.pdf", "hola", "sha123")
 
-    assert exc_info.value.status_code == 400
-    assert exc_info.value.code == "REPEATED"
-    assert requests_seen == ["http://store:8003/pdfs"]  # nunca hubo GET
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.code == "DUPLICATE_DOCUMENT"
+    assert requests_seen == ["http://store:8003/api/v1/store"]  # nunca hubo GET
 
 
-def test_store_resolves_repeated_400_after_retry_via_get_by_checksum():
+def test_store_resolves_duplicate_after_retry_via_get_by_checksum():
     attempts = {"n": 0}
 
     def handler(request):
@@ -199,10 +211,12 @@ def test_store_resolves_repeated_400_after_retry_via_get_by_checksum():
         url = str(request.url)
         if attempts["n"] == 1:
             raise httpx.ConnectError("timeout", request=request)
-        if "/pdfs/checksum/" in url:
-            assert url.endswith("/pdfs/checksum/sha123")
+        if "/documents/checksum/" in url:
+            assert url.endswith("/api/v1/documents/checksum/sha123")
             return httpx.Response(200, json={"id": "existing"})
-        return httpx.Response(400, json={"detail": REPEATED_MSG, "code": "REPEATED"})
+        return httpx.Response(
+            409, json={"error_code": "DUPLICATE_DOCUMENT", "message": REPEATED_MSG}
+        )
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
     store = StoreClient(client, "http://store:8003")
@@ -221,9 +235,11 @@ def test_store_resolution_failure_is_fatal_upstream_error():
         url = str(request.url)
         if attempts["n"] == 1:
             raise httpx.ConnectError("timeout", request=request)
-        if "/pdfs/checksum/" in url:
-            return httpx.Response(404, json={"detail": "not found"})
-        return httpx.Response(400, json={"detail": REPEATED_MSG, "code": "REPEATED"})
+        if "/documents/checksum/" in url:
+            return httpx.Response(404, json={"error_code": "NOT_FOUND", "message": "not found"})
+        return httpx.Response(
+            409, json={"error_code": "DUPLICATE_DOCUMENT", "message": REPEATED_MSG}
+        )
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
     store = StoreClient(client, "http://store:8003")
@@ -232,10 +248,10 @@ def test_store_resolution_failure_is_fatal_upstream_error():
         store.store("doc.pdf", "hola", "sha123")
 
 
-def test_get_by_checksum_returns_existing_id():
+def test_get_by_checksum_returns_existing_document():
     def handler(request):
         assert request.method == "GET"
-        assert str(request.url).endswith("/pdfs/checksum/sha123")
+        assert str(request.url).endswith("/api/v1/documents/checksum/sha123")
         return httpx.Response(200, json={"id": "existing"})
 
     client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
@@ -244,3 +260,31 @@ def test_get_by_checksum_returns_existing_id():
     result = store.get_by_checksum("sha123")
 
     assert result == {"id": "existing"}
+
+
+def test_get_by_id_returns_document():
+    def handler(request):
+        assert request.method == "GET"
+        assert str(request.url).endswith("/api/v1/documents/abc123")
+        return httpx.Response(200, json={"id": "abc123", "content": "texto"})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    result = store.get_by_id("abc123")
+
+    assert result == {"id": "abc123", "content": "texto"}
+
+
+def test_list_all_returns_documents():
+    def handler(request):
+        assert request.method == "GET"
+        assert str(request.url).endswith("/api/v1/documents")
+        return httpx.Response(200, json=[{"id": "abc123"}])
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    result = store.list_all()
+
+    assert result == [{"id": "abc123"}]

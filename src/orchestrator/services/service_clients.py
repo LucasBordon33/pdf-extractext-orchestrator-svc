@@ -90,22 +90,35 @@ class ExtractorClient:
         )
 
 
+_API_PREFIX = "/api/v1"
+
+
 class StoreClient:
-    """Cliente del store (MS4): alta de PDFs y resolución de duplicados."""
+    """Cliente del store (MS4): alta, consulta por id/checksum, listado y duplicados."""
 
     def __init__(self, client: ServiceClient, base_url: str) -> None:
         self._client = client
         self._base_url = base_url.rstrip("/")
 
-    def store(self, name: str, text: str, checksum: str) -> dict[str, Any]:
-        payload = {"name": name, "text": text, "checksum": checksum}
+    def store(self, name: str, text: str, checksum: str, size: int = 0) -> dict[str, Any]:
+        payload = {"name": name, "text": text, "checksum": checksum, "size": size}
         try:
-            return self._client.request("POST", f"{self._base_url}/pdfs", json=payload)
+            return self._client.request(
+                "POST", f"{self._base_url}{_API_PREFIX}/store", json=payload
+            )
         except UpstreamError:
             return self._resolve_duplicate(checksum)
 
+    def get_by_id(self, doc_id: str) -> dict[str, Any]:
+        return self._client.request("GET", f"{self._base_url}{_API_PREFIX}/documents/{doc_id}")
+
     def get_by_checksum(self, checksum: str) -> dict[str, Any]:
-        return self._client.request("GET", f"{self._base_url}/pdfs/checksum/{checksum}")
+        return self._client.request(
+            "GET", f"{self._base_url}{_API_PREFIX}/documents/checksum/{checksum}"
+        )
+
+    def list_all(self) -> list[dict[str, Any]]:
+        return self._client.request("GET", f"{self._base_url}{_API_PREFIX}/documents")
 
     def _resolve_duplicate(self, checksum: str) -> dict[str, Any]:
         try:
