@@ -1,0 +1,19 @@
+# Microservicio orquestador
+services:
+  orchestrator:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    networks:
+      - pdf-extractext-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.orchestrator.rule=Host(`orchestrator.localhost`)"
+      - "traefik.http.routers.orchestrator.entrypoints=web"
+      - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
+      - "traefik.docker.network=pdf-extractext-network"
+
+networks:
+  pdf-extractext-network:
+    external: true
+    name: pdf-extractext_pdf-extractext-network
