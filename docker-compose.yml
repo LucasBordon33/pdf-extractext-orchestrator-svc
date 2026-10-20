@@ -1,4 +1,6 @@
-# Microservicio orquestador
+# Microservicio orquestador + infraestructura compartida del stack.
+# Traefik y MongoDB se levantan desde aca (antes vivian en el compose del
+# monolito, que ya no se usa). El servicio `app` del monolito queda retirado.
 services:
   orchestrator:
     build: .
@@ -11,9 +13,67 @@ services:
       - "traefik.http.routers.orchestrator.rule=Host(`orchestrator.localhost`)"
       - "traefik.http.routers.orchestrator.entrypoints=web"
       - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
-      - "traefik.docker.network=pdf-extractext-network"
+      - "traefik.docker.network=pdf-extractext_pdf-extractext-network"
+      # El host publico que servia el monolito queda en el orquestador;
+      # /validate sigue yendo al MS3 (su router tiene prioridad 100).
+      - "traefik.http.routers.orchestrator-alias.rule=Host(`universidad.localhost`)"
+      - "traefik.http.routers.orchestrator-alias.entrypoints=websecure"
+      - "traefik.http.routers.orchestrator-alias.tls=true"
+      - "traefik.http.routers.orchestrator-alias.service=orchestrator"
+
+  traefik:
+    # v3.7: v2.11 murio con Docker Engine 29+ (no negocia la API del daemon)
+    image: traefik:v3.7
+    container_name: traefik
+    command:
+      - --api.insecure=true
+      - --api.dashboard=true
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+      - --entrypoints.mongodb.address=:27017
+      - --certificatesresolvers.default.acme.tlschallenge=true
+      - --certificatesresolvers.default.acme.email=tuemail@ejemplo.com
+      - --certificatesresolvers.default.acme.storage=/letsencrypt/acme.json
+    ports:
+      - "80:80"
+      - "443:443"
+      - "27017:27017"
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.api.rule=Host(`traefik.universidad.localhost`)"
+      - "traefik.http.routers.api.service=api@internal"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls=true"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    networks:
+      - pdf-extractext-network
+
+  mongodb:
+    image: mongo:7-jammy
+    container_name: pdf-extractext-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASS}
+    volumes:
+      - mongodb_data:/data/db
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.routers.mongo.rule=HostSNI(`mongo-express.universidad.localhost`)"
+      - "traefik.tcp.routers.mongo.entrypoints=mongodb"
+      - "traefik.tcp.routers.mongo.tls=true"
+      - "traefik.tcp.services.mongo.loadbalancer.server.port=27017"
+    networks:
+      - pdf-extractext-network
 
 networks:
   pdf-extractext-network:
-    external: true
     name: pdf-extractext_pdf-extractext-network
+    driver: bridge
+
+volumes:
+  mongodb_data:
