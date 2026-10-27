@@ -16,7 +16,7 @@ export const options = {
   },
 };
 
-const pdf = open("src/orchestrator/tests/stress/pdfs/prueba.pdf", "b");
+const pdfFile = open('../src/orchestrator/tests/stress/pdfs/prueba.pdf', 'b');
 
 const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
 
