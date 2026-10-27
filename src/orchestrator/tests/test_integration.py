@@ -1,7 +1,7 @@
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import (
+from .helpers import (
     DEFAULT_CHECKSUM,
     DEFAULT_CONTENT,
     DOCUMENT_ID,

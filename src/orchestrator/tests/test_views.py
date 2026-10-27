@@ -1,7 +1,7 @@
 import json
 
 import pytest
-from helpers import (
+from .helpers import (
     EXTRACTION_422,
     OVERSIZE_MSG,
     REPEATED_MSG,

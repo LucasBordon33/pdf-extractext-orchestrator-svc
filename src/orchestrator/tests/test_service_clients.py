@@ -4,7 +4,7 @@ import time
 
 import httpx
 import pytest
-from helpers import (
+from .helpers import (
     DEFAULT_CONTENT,
     EXTRACTION_422,
     REPEATED_MSG,

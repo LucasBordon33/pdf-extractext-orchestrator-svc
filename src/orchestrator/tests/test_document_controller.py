@@ -1,5 +1,5 @@
 import pytest
-from helpers import (
+from .helpers import (
     DEFAULT_CHECKSUM,
     DEFAULT_CONTENT,
     DOCUMENT_ID,

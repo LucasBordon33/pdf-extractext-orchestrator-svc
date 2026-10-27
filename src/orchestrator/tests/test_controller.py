@@ -1,7 +1,7 @@
 import hashlib
 
 import pytest
-from helpers import (
+from .helpers import (
     DEFAULT_CHECKSUM,
     DEFAULT_CONTENT,
     EXTRACTION_422,
