@@ -115,7 +115,7 @@ def run_cmd(cmd):
 
 def build_summary(k6, vegeta, passed):
     return {
-        "fecha": datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds"),
+        "fecha": datetime.datetime.now(datetime.UTC).isoformat(timespec="seconds"),
         "git_commit": run_cmd(["git", "rev-parse", "HEAD"]),
         "python_version": sys.version.split()[0],
         "docker_version": run_cmd(["docker", "--version"]),
