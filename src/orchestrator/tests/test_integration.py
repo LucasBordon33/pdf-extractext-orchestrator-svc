@@ -1,6 +1,14 @@
 
 import pytest
 from fastapi.testclient import TestClient
+
+from orchestrator.controllers.document_controller import DocumentController
+from orchestrator.controllers.upload_controller import UploadController
+from orchestrator.exceptions import ServiceError, UpstreamError
+from orchestrator.main import app
+from orchestrator.routers.document_router import get_document_controller
+from orchestrator.routers.upload_router import get_controller
+
 from .helpers import (
     DEFAULT_CHECKSUM,
     DEFAULT_CONTENT,
@@ -17,13 +25,6 @@ from .helpers import (
     FakeValidator,
     make_settings,
 )
-
-from orchestrator.controllers.document_controller import DocumentController
-from orchestrator.controllers.upload_controller import UploadController
-from orchestrator.exceptions import ServiceError, UpstreamError
-from orchestrator.main import app
-from orchestrator.routers.document_router import get_document_controller
-from orchestrator.routers.upload_router import get_controller
 
 
 @pytest.fixture

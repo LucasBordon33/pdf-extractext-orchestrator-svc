@@ -1,13 +1,13 @@
 import json
 
-from .helpers import DEFAULT_CHECKSUM, DEFAULT_CONTENT, DOCUMENT_ID, DOCUMENT_PAYLOAD
-
 from orchestrator.models.pdf import PDF
 from orchestrator.views.document_view import (
     build_document,
     document_list_response,
     document_response,
 )
+
+from .helpers import DEFAULT_CHECKSUM, DEFAULT_CONTENT, DOCUMENT_ID, DOCUMENT_PAYLOAD
 
 
 def _pdf() -> PDF:
