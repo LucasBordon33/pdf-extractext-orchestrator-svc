@@ -6,6 +6,7 @@
 # Variante con Python 3.12 preinstalado sobre bookworm-slim: usa el mismo
 # layout de intérprete que el stage de runtime (/usr/local/bin/python3.12),
 # para que los symlinks del .venv copiado sigan resolviendo.
+# ============================================================
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS build
 
 WORKDIR /app
@@ -26,9 +27,11 @@ ENV UV_PYTHON_DOWNLOADS=never
 RUN uv sync --frozen --no-dev
 
 # ============================================================
-# Stage 2 (runtime): imagen final liviana, solo con lo necesario
+# Stage 2 (runtime): imagen final de producción, solo la app
 # ============================================================
-FROM python:3.12-slim
+# Sin k6 ni vegeta: son herramientas de desarrollo/pruebas de carga.
+# ============================================================
+FROM python:3.12-slim AS runtime
 
 WORKDIR /app
 
@@ -47,3 +50,4 @@ ENV PYTHONUNBUFFERED=1
 EXPOSE 8000
 
 CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]
+

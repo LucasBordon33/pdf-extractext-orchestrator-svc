@@ -6,11 +6,13 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    ports:
+      - "8000:8000"
     networks:
       - pdf-extractext-network
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.orchestrator.rule=Host(`orchestrator.localhost`)"
+      - "traefik.http.routers.orchestrator.rule=Host(`orchestrator.localhost`) || Host(`localhost`) || Host(`127.0.0.1`)"
       - "traefik.http.routers.orchestrator.entrypoints=web"
       - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
       - "traefik.docker.network=pdf-extractext_pdf-extractext-network"
@@ -69,6 +71,44 @@ services:
       - "traefik.tcp.services.mongo.loadbalancer.server.port=27017"
     networks:
       - pdf-extractext-network
+
+  # -------------------------------------------------------------------------
+  # Perfil opcional `stress`: herramientas de carga, de forma reproducible.
+  # Levantar con: docker compose --profile stress up
+  # Por defecto NO corren en `docker compose up --build`.
+  # -------------------------------------------------------------------------
+  k6:
+    image: grafana/k6:0.54.0
+    profiles: ["stress"]
+    environment:
+      BASE_URL: http://orchestrator:8000
+      UPLOAD_PATH: /api/v1/upload
+      PDF_FILES: prueba.pdf
+    volumes:
+      - ./src/orchestrator/tests/stress:/stress:ro
+    working_dir: /stress
+    command: ["run", "spike.js"]
+    networks:
+      - pdf-extractext-network
+    depends_on:
+      orchestrator:
+        condition: service_started
+
+  vegeta:
+    image: peterevans/vegeta:latest
+    profiles: ["stress"]
+    environment:
+      BASE_URL: http://orchestrator:8000
+    volumes:
+      - ./src/orchestrator/tests/stress:/stress:ro
+    working_dir: /stress
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["bash", "/stress/vegeta_load.sh"]
+    networks:
+      - pdf-extractext-network
+    depends_on:
+      orchestrator:
+        condition: service_started
 
 networks:
   pdf-extractext-network:

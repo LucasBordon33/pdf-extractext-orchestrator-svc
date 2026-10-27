@@ -1,0 +1,57 @@
+rules:
+  - id: orchestrator-no-disk-write
+    languages: [python]
+    severity: ERROR
+    message: "Escritura a disco prohibida. El orquestador procesa el PDF en memoria (file.file.read()) y delega por HTTP a los servicios upstream."
+    paths:
+      include:
+        - src/orchestrator/
+      exclude:
+        - src/orchestrator/tests/
+    patterns:
+      - pattern-either:
+          # Semgrep normaliza comillas, por lo que buscar "w" atrapa también 'w'
+          - pattern: open(..., "w", ...)
+          - pattern: open(..., "a", ...)
+          - pattern: open(..., "wb", ...)
+          - pattern: open(..., "ab", ...)
+          - pattern: open(..., "x", ...)
+          - pattern: open(..., "xb", ...)
+          - pattern: $P.write_text(...)
+          - pattern: $P.write_bytes(...)
+          - pattern: pathlib.Path(...).write_text(...)
+          - pattern: pathlib.Path(...).write_bytes(...)
+          - pattern: shutil.copy(...)
+          - pattern: shutil.copy2(...)
+          - pattern: shutil.move(...)
+          - pattern: tempfile.NamedTemporaryFile(..., delete=False, ...)
+          - pattern: tempfile.mkstemp(...)
+
+  - id: orchestrator-no-shell-exec
+    languages: [python]
+    severity: ERROR
+    message: "Prohibido usar subprocess con shell=True, os.system u os.popen."
+    paths:
+      include:
+        - src/orchestrator/
+      exclude:
+        - src/orchestrator/tests/
+    patterns:
+      - pattern-either:
+          - pattern: subprocess.$FUNC(..., shell=True, ...)
+          - pattern: os.system(...)
+          - pattern: os.popen(...)
+
+  - id: orchestrator-no-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: "Prohibido usar eval o exec."
+    paths:
+      include:
+        - src/orchestrator/
+      exclude:
+        - src/orchestrator/tests/
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: exec(...)

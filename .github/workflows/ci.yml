@@ -1,0 +1,64 @@
+# CI del microservicio 1 (Orquestador)
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    name: Lint, tipado y tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Instalar dependencias (lockfile)
+        run: uv sync --locked --all-extras
+
+      - name: Ruff (lint)
+        run: uv run ruff check .
+
+      - name: Mypy (tipado estático)
+        run: uv run mypy
+
+      - name: Pytest
+        run: uv run pytest
+
+  load-smoke:
+    name: Smoke de carga k6 (10 VUs x 10 s)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build de la imagen
+        run: docker build -t orchestrator-service:ci .
+
+      - name: Levantar el servicio y esperar el healthcheck
+        run: |
+          docker run -d --name svc -p 8000:8000 \
+            -e UVICORN_WORKERS=1 \
+            orchestrator-service:ci
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:8000/health > /dev/null && exit 0
+            sleep 1
+          done
+          echo "el servicio no levantó en 30 s" && exit 1
+
+      - name: Smoke k6 (contrato bajo concurrencia)
+        uses: grafana/k6-action@v0.3.1
+        with:
+          filename: load/k6-smoke.js
+        env:
+          BASE_URL: http://localhost:8000
+
+      - name: Logs del servicio (solo si el smoke falla)
+        if: failure()
+        run: docker logs svc
+
+      - name: Apagar el servicio
+        if: always()
+        run: docker rm -f svc
