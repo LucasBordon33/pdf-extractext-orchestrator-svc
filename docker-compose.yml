@@ -1,119 +1,33 @@
-# Microservicio orquestador + infraestructura compartida del stack.
-# Traefik y MongoDB se levantan desde aca (antes vivian en el compose del
-# monolito, que ya no se usa). El servicio `app` del monolito queda retirado.
 services:
   orchestrator:
     build: .
     restart: unless-stopped
-    env_file: .env
-    ports:
-      - "8000:8000"
+    env_file: 
+      - path: .env
+        required: false
     networks:
       - pdf-extractext-network
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=pdf-extractext-network"
+      
       - "traefik.http.routers.orchestrator.rule=Host(`orchestrator.localhost`) || Host(`localhost`) || Host(`127.0.0.1`)"
       - "traefik.http.routers.orchestrator.entrypoints=web"
-      - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
-      - "traefik.docker.network=pdf-extractext_pdf-extractext-network"
-      # El host publico que servia el monolito queda en el orquestador;
-      # /validate sigue yendo al MS3 (su router tiene prioridad 100).
+      - "traefik.http.routers.orchestrator.middlewares=orchestrator-retry@docker, orchestrator-cb@docker"
+      
       - "traefik.http.routers.orchestrator-alias.rule=Host(`universidad.localhost`)"
       - "traefik.http.routers.orchestrator-alias.entrypoints=websecure"
       - "traefik.http.routers.orchestrator-alias.tls=true"
-      - "traefik.http.routers.orchestrator-alias.service=orchestrator"
+      - "traefik.http.routers.orchestrator-alias.middlewares=orchestrator-retry@docker, orchestrator-cb@docker"
+      
+      - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
 
-  traefik:
-    # v3.7: v2.11 murio con Docker Engine 29+ (no negocia la API del daemon)
-    image: traefik:v3.7
-    container_name: traefik
-    command:
-      - --api.insecure=true
-      - --api.dashboard=true
-      - --providers.docker=true
-      - --providers.docker.exposedbydefault=false
-      - --entrypoints.web.address=:80
-      - --entrypoints.websecure.address=:443
-      - --entrypoints.mongodb.address=:27017
-      - --certificatesresolvers.default.acme.tlschallenge=true
-      - --certificatesresolvers.default.acme.email=tuemail@ejemplo.com
-      - --certificatesresolvers.default.acme.storage=/letsencrypt/acme.json
-    ports:
-      - "80:80"
-      - "443:443"
-      - "27017:27017"
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.api.rule=Host(`traefik.universidad.localhost`)"
-      - "traefik.http.routers.api.service=api@internal"
-      - "traefik.http.routers.api.entrypoints=websecure"
-      - "traefik.http.routers.api.tls=true"
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-    restart: unless-stopped
-    networks:
-      - pdf-extractext-network
-
-  mongodb:
-    image: mongo:7-jammy
-    container_name: pdf-extractext-mongodb
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=${MONGO_USER}
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASS}
-    volumes:
-      - mongodb_data:/data/db
-    restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
-      - "traefik.tcp.routers.mongo.rule=HostSNI(`mongo-express.universidad.localhost`)"
-      - "traefik.tcp.routers.mongo.entrypoints=mongodb"
-      - "traefik.tcp.routers.mongo.tls=true"
-      - "traefik.tcp.services.mongo.loadbalancer.server.port=27017"
-    networks:
-      - pdf-extractext-network
-
-  # -------------------------------------------------------------------------
-  # Perfil opcional `stress`: herramientas de carga, de forma reproducible.
-  # Levantar con: docker compose --profile stress up
-  # Por defecto NO corren en `docker compose up --build`.
-  # -------------------------------------------------------------------------
-  k6:
-    image: grafana/k6:0.54.0
-    profiles: ["stress"]
-    environment:
-      BASE_URL: http://orchestrator:8000
-      UPLOAD_PATH: /api/v1/upload
-      PDF_FILES: prueba.pdf
-    volumes:
-      - ./src/orchestrator/tests/stress:/stress:ro
-    working_dir: /stress
-    command: ["run", "spike.js"]
-    networks:
-      - pdf-extractext-network
-    depends_on:
-      orchestrator:
-        condition: service_started
-
-  vegeta:
-    image: peterevans/vegeta:latest
-    profiles: ["stress"]
-    environment:
-      BASE_URL: http://orchestrator:8000
-    volumes:
-      - ./src/orchestrator/tests/stress:/stress:ro
-    working_dir: /stress
-    entrypoint: ["/bin/sh", "-c"]
-    command: ["bash", "/stress/vegeta_load.sh"]
-    networks:
-      - pdf-extractext-network
-    depends_on:
-      orchestrator:
-        condition: service_started
+      - "traefik.http.middlewares.orchestrator-retry.retry.attempts=3"
+      - "traefik.http.middlewares.orchestrator-retry.retry.initialinterval=100ms"
+      - "traefik.http.middlewares.orchestrator-cb.circuitbreaker.expression=NetworkErrorRatio() > 0.2 || ResponseCodeRatio(500, 600, 0, 600) > 0.2"
+      - "traefik.http.middlewares.orchestrator-cb.circuitbreaker.checkperiod=10s"
+      - "traefik.http.middlewares.orchestrator-cb.circuitbreaker.fallbackduration=15s"
 
 networks:
   pdf-extractext-network:
-    name: pdf-extractext_pdf-extractext-network
-    driver: bridge
-
-volumes:
-  mongodb_data:
+    external: true

@@ -1,0 +1,29 @@
+services:
+  k6:
+    image: grafana/k6:0.54.0
+    environment:
+      BASE_URL: http://traefik
+      UPLOAD_PATH: /api/v1/upload
+      PDF_FILES: prueba.pdf
+    volumes:
+      - ./src/orchestrator/tests/stress:/stress:ro
+    working_dir: /stress
+    command: ["run", "spike.js"]
+    networks:
+      - pdf-extractext-network
+
+  vegeta:
+    image: peterevans/vegeta:latest
+    environment:
+      BASE_URL: http://traefik
+    volumes:
+      - ./src/orchestrator/tests/stress:/stress:ro
+    working_dir: /stress
+    entrypoint: ["/bin/sh", "-c"]
+    command: ["bash", "/stress/vegeta_load.sh"]
+    networks:
+      - pdf-extractext-network
+
+networks:
+  pdf-extractext-network:
+    external: true

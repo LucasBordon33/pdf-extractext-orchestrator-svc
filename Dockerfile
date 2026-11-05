@@ -1,53 +1,43 @@
-# syntax=docker/dockerfile:1
-
-# ============================================================
-# Stage 1 (build): resuelve e instala las dependencias con uv
-# ============================================================
-# Variante con Python 3.12 preinstalado sobre bookworm-slim: usa el mismo
-# layout de intérprete que el stage de runtime (/usr/local/bin/python3.12),
-# para que los symlinks del .venv copiado sigan resolviendo.
-# ============================================================
 FROM ghcr.io/astral-sh/uv:python3.12-bookworm-slim AS build
 
+ENV UV_PYTHON_DOWNLOADS=never \
+    UV_COMPILE_BYTECODE=1
+
 WORKDIR /app
 
-# Manifiestos primero: esta capa se cachea mientras no cambien. README.md es
-# necesario porque pyproject.toml lo declara y hatchling lo valida al construir.
-COPY pyproject.toml uv.lock README.md ./
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-dev --no-install-project
 
-# El proyecto es instalable (hatchling), así que `uv sync` también lo construye
-# e instala como editable: necesita el paquete fuente disponible.
+COPY README.md ./
 COPY src ./src
-
-# Fuerza el uso del Python 3.12 preinstalado en la imagen; si uv descargara
-# uno propio, sus binarios no existirían en el stage de runtime.
-ENV UV_PYTHON_DOWNLOADS=never
-
-# Instala exactamente lo que declara uv.lock, sin el grupo dev.
 RUN uv sync --frozen --no-dev
 
-# ============================================================
-# Stage 2 (runtime): imagen final de producción, solo la app
-# ============================================================
-# Sin k6 ni vegeta: son herramientas de desarrollo/pruebas de carga.
-# ============================================================
 FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/app/.venv/bin:$PATH"
+
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-# Entorno virtual ya resuelto: dependencias listas para usar.
+RUN groupadd --system appuser \
+    && useradd --system --gid appuser --no-create-home appuser
+
+# Copiar el entorno virtual compilado desde el builder
 COPY --from=build /app/.venv /app/.venv
 
-# Código de la aplicación (la instalación editable apunta a /app/src).
-COPY src ./src
+COPY --chown=appuser:appuser src ./src
 
-# Binarios del venv por defecto: `uvicorn` resuelve al del venv.
-ENV PATH="/app/.venv/bin:$PATH"
-
-# Logs de uvicorn/FastAPI sin buffering (salida directa a consola).
-ENV PYTHONUNBUFFERED=1
+USER appuser
 
 EXPOSE 8000
 
-CMD ["uvicorn", "orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD ["python", "-c", "import urllib.request, sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"]
+
+CMD ["uvicorn", "src.orchestrator.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
