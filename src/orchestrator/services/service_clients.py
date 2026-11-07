@@ -1,7 +1,6 @@
-"""Clientes HTTP síncronos hacia los microservicios internos (validador, extractor, store)."""
-
 import base64
 import time
+from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -9,9 +8,20 @@ import httpx
 from orchestrator.config import Settings
 from orchestrator.exceptions import ServiceError, UpstreamError
 
+BaseUrlSource = str | Callable[[], str]
+
+
+class _BaseUrl:
+
+    def __init__(self, source: BaseUrlSource) -> None:
+        self._source: BaseUrlSource = source
+
+    def resolve(self) -> str:
+        url = self._source() if callable(self._source) else self._source
+        return url.rstrip("/")
+
 
 def _error_fields(response: httpx.Response) -> tuple[str, str | None]:
-    """Extrae `(detail, code)` del body de error, aceptando ambos envelopes."""
     try:
         body = response.json()
     except ValueError:
@@ -26,7 +36,6 @@ def _error_fields(response: httpx.Response) -> tuple[str, str | None]:
 
 
 class ServiceClient:
-    """Cliente HTTP con reintentos por transporte/5xx y backoff exponencial."""
 
     def __init__(self, settings: Settings, transport: httpx.BaseTransport | None = None) -> None:
         self._settings = settings
@@ -60,31 +69,31 @@ class ServiceClient:
 
 
 class ValidatorClient:
-    """Cliente del validador (MS3): POST JSON con el contenido en base64."""
 
-    def __init__(self, client: ServiceClient, base_url: str) -> None:
+    def __init__(self, client: ServiceClient, base_url: BaseUrlSource) -> None:
         self._client = client
-        self._base_url = base_url.rstrip("/")
+        self._base_url = _BaseUrl(base_url)
 
     def validate(self, content: bytes, filename: str) -> dict[str, Any]:
         payload = {
             "name": filename,
             "content_base64": base64.b64encode(content).decode("ascii"),
         }
-        return self._client.request("POST", f"{self._base_url}/validate", json=payload)
+        return self._client.request(
+            "POST", f"{self._base_url.resolve()}/validate", json=payload
+        )
 
 
 class ExtractorClient:
-    """Cliente del extractor (MS2): POST del PDF como binario crudo."""
 
-    def __init__(self, client: ServiceClient, base_url: str) -> None:
+    def __init__(self, client: ServiceClient, base_url: BaseUrlSource) -> None:
         self._client = client
-        self._base_url = base_url.rstrip("/")
+        self._base_url = _BaseUrl(base_url)
 
     def extract(self, content: bytes, filename: str) -> dict[str, Any]:
         return self._client.request(
             "POST",
-            f"{self._base_url}/extract",
+            f"{self._base_url.resolve()}/extract",
             content=content,
             headers={"Content-Type": "application/pdf"},
         )
@@ -94,31 +103,34 @@ _API_PREFIX = "/api/v1"
 
 
 class StoreClient:
-    """Cliente del store (MS4): alta, consulta por id/checksum, listado y duplicados."""
 
-    def __init__(self, client: ServiceClient, base_url: str) -> None:
+    def __init__(self, client: ServiceClient, base_url: BaseUrlSource) -> None:
         self._client = client
-        self._base_url = base_url.rstrip("/")
+        self._base_url = _BaseUrl(base_url)
 
     def store(self, name: str, text: str, checksum: str, size: int = 0) -> dict[str, Any]:
         payload = {"name": name, "text": text, "checksum": checksum, "size": size}
         try:
             return self._client.request(
-                "POST", f"{self._base_url}{_API_PREFIX}/store", json=payload
+                "POST", f"{self._base_url.resolve()}{_API_PREFIX}/store", json=payload
             )
         except UpstreamError:
             return self._resolve_duplicate(checksum)
 
     def get_by_id(self, doc_id: str) -> dict[str, Any]:
-        return self._client.request("GET", f"{self._base_url}{_API_PREFIX}/documents/{doc_id}")
+        return self._client.request(
+            "GET", f"{self._base_url.resolve()}{_API_PREFIX}/documents/{doc_id}"
+        )
 
     def get_by_checksum(self, checksum: str) -> dict[str, Any]:
         return self._client.request(
-            "GET", f"{self._base_url}{_API_PREFIX}/documents/checksum/{checksum}"
+            "GET", f"{self._base_url.resolve()}{_API_PREFIX}/documents/checksum/{checksum}"
         )
 
     def list_all(self) -> list[dict[str, Any]]:
-        return self._client.request("GET", f"{self._base_url}{_API_PREFIX}/documents")
+        return self._client.request(
+            "GET", f"{self._base_url.resolve()}{_API_PREFIX}/documents"
+        )
 
     def _resolve_duplicate(self, checksum: str) -> dict[str, Any]:
         try:

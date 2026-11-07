@@ -22,6 +22,9 @@ from orchestrator.exceptions import (
     ServiceError,
     UpstreamError,
 )
+from orchestrator.infrastructure.consul import attach_health, attach_lifespan
+from orchestrator.infrastructure.consul.discovery import resolve_url
+from orchestrator.infrastructure.service_discovery import configure_logging
 from orchestrator.routers.document_router import router as document_router
 from orchestrator.routers.upload_router import router as upload_router
 from orchestrator.services.service_clients import (
@@ -41,9 +44,18 @@ def create_app(settings: Settings) -> FastAPI:
     app = FastAPI(title="pdf-extractext-orchestrator")
 
     client = ServiceClient(settings)
-    validator = ValidatorClient(client, settings.validator_service_url)
-    extractor = ExtractorClient(client, settings.extractor_service_url)
-    store = StoreClient(client, settings.store_service_url)
+    # Resolución dinámica vía Consul con fallback a la URL estática de
+    # `Settings`: si Consul no está disponible, el pipeline sigue
+    # funcionando igual que antes del discovery.
+    validator = ValidatorClient(
+        client, lambda: resolve_url("validator", settings.validator_service_url)
+    )
+    extractor = ExtractorClient(
+        client, lambda: resolve_url("extractor", settings.extractor_service_url)
+    )
+    store = StoreClient(
+        client, lambda: resolve_url("store", settings.store_service_url)
+    )
 
     # Los routers resuelven sus controladores desde `app.state` (ISSUE-012).
     app.state.controller = UploadController(validator, extractor, store, settings)
@@ -53,7 +65,9 @@ def create_app(settings: Settings) -> FastAPI:
     app.include_router(document_router)
 
     _register_exception_handlers(app)
-    _register_health(app)
+    attach_health(app)
+    # Registro en Consul al iniciar y desregistro al apagar (SIGINT/SIGTERM).
+    attach_lifespan(app)
     return app
 
 
@@ -88,12 +102,8 @@ def _register_exception_handlers(app: FastAPI) -> None:
         return JSONResponse(jsonable_encoder(exc.errors()), status_code=422)
 
 
-def _register_health(app: FastAPI) -> None:
-    @app.get("/health")
-    def health() -> dict[str, str]:
-        """Healthcheck del orquestador con body fijo."""
-        return {"status": "healthy", "service": "orchestrator"}
-
-
 settings = Settings()
+# Logging propio para los eventos de service discovery: sin handler en el
+# root logger de uvicorn, los INFO de registro/desregistro no serían visibles.
+configure_logging(level=settings.log_level)
 app = create_app(settings)
