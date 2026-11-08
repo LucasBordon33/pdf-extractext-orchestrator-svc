@@ -42,27 +42,16 @@ class ServiceClient:
         self._http = httpx.Client(transport=transport, timeout=settings.http_timeout)
 
     def request(self, method: str, url: str, **kwargs: Any) -> Any:
-        retries = self._settings.http_retries
-        for attempt in range(retries + 1):
-            try:
-                response = self._http.request(method, url, **kwargs)
-            except httpx.TransportError as exc:
-                if attempt == retries:
-                    raise UpstreamError(f"{method} {url} inalcanzable") from exc
-                time.sleep(self._retry_delay(attempt))
-                continue
-            if response.status_code >= 500:
-                if attempt == retries:
-                    raise UpstreamError(f"{method} {url} -> {response.status_code}")
-                time.sleep(self._retry_delay(attempt))
-                continue
-            if response.status_code >= 400:
-                if attempt > 0:
-                    raise UpstreamError(f"{method} {url} -> {response.status_code} tras reintentos")
-                detail, code = _error_fields(response)
-                raise ServiceError(response.status_code, detail, code)
-            return response.json()
-        raise UpstreamError(f"{method} {url} sin respuesta")
+        try:
+            response = self._http.request(method, url, **kwargs)
+        except httpx.TransportError as exc:
+            raise UpstreamError(f"{method} {url} inalcanzable") from exc
+        if response.status_code >= 500:
+            raise UpstreamError(f"{method} {url} -> {response.status_code}")
+        if response.status_code >= 400:
+            detail, code = _error_fields(response)
+            raise ServiceError(response.status_code, detail, code)
+        return response.json()
 
     def _retry_delay(self, attempt: int) -> float:
         return self._settings.http_retry_backoff * 2**attempt
