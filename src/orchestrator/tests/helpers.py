@@ -112,3 +112,9 @@ class FakeStore:
         if size is not None:
             updated["size"] = size
         return updated
+
+    def delete_by_id(self, doc_id):
+        self.calls.append(("delete_by_id", doc_id))
+        if self.error is not None:
+            raise self.error
+        return True
