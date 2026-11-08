@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     inyección (ISSUE-012); ninguna lee `os.environ` directamente.
     """
 
-    model_config = SettingsConfigDict(env_file=".env")
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     http_timeout: float = 30.0
     http_retries: int = 3

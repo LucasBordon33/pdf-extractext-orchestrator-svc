@@ -97,3 +97,18 @@ class FakeStore:
         if self.error is not None:
             raise self.error
         return self.documents
+
+    def update_by_id(self, doc_id, name=None, text=None, size=None):
+        self.calls.append(("update_by_id", doc_id, name, text, size))
+        if self.error is not None:
+            raise self.error
+        if self.document is None:
+            return None
+        updated = dict(self.document)
+        if name is not None:
+            updated["name"] = name
+        if text is not None:
+            updated["content"] = text
+        if size is not None:
+            updated["size"] = size
+        return updated

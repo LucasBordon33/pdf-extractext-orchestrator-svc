@@ -13,6 +13,12 @@ class StoreReadPort(Protocol):
 
     def list_all(self) -> list[dict[str, Any]]: ...
 
+    def delete_by_id(self, doc_id: str) -> bool: ...
+
+    def update_by_id(
+        self, doc_id: str, name: str | None = None, text: str | None = None, size: int | None = None
+    ) -> dict[str, Any] | None: ...
+
 
 def _rejection_from_store(exc: ServiceError) -> Exception:
     if exc.status_code == 404:
@@ -43,6 +49,31 @@ class DocumentController:
         except ServiceError as exc:
             raise _rejection_from_store(exc) from exc
         return [_to_pdf(payload) for payload in payloads]
+
+    def delete_document(self, doc_id: str) -> bool:
+        try:
+            return self._store.delete_by_id(doc_id)
+        except UpstreamError:
+            raise
+        except ServiceError as exc:
+            raise _rejection_from_store(exc) from exc
+
+    def update_document(
+        self,
+        doc_id: str,
+        name: str | None = None,
+        text: str | None = None,
+        size: int | None = None,
+    ) -> PDF | None:
+        try:
+            payload = self._store.update_by_id(doc_id, name=name, text=text, size=size)
+        except UpstreamError:
+            raise
+        except ServiceError as exc:
+            raise _rejection_from_store(exc) from exc
+        if payload is None:
+            return None
+        return _to_pdf(payload)
 
 
 def _to_pdf(payload: dict[str, Any]) -> PDF:

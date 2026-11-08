@@ -79,3 +79,63 @@ def test_list_documents_upstream_error_propagates():
 
     with pytest.raises(UpstreamError):
         controller.list_documents()
+
+
+def test_update_document_maps_store_payload_to_pdf():
+    store = FakeStore(document=DOCUMENT_PAYLOAD)
+    controller = _controller(store)
+
+    pdf = controller.update_document(DOCUMENT_ID, name="nuevo.pdf", size=999)
+
+    assert pdf.id == DOCUMENT_ID
+    assert pdf.name == "nuevo.pdf"
+    assert pdf.text == "texto extraido"
+    assert pdf.checksum == DEFAULT_CHECKSUM
+    assert pdf.size == 999
+    assert store.calls == [("update_by_id", DOCUMENT_ID, "nuevo.pdf", None, 999)]
+
+
+def test_update_document_patches_only_provided_fields():
+    store = FakeStore(document=DOCUMENT_PAYLOAD)
+    controller = _controller(store)
+
+    controller.update_document(DOCUMENT_ID, text="nuevo texto")
+
+    assert store.calls == [("update_by_id", DOCUMENT_ID, None, "nuevo texto", None)]
+
+
+def test_update_document_returns_none_when_not_found():
+    store = FakeStore(document=None)
+    controller = _controller(store)
+
+    assert controller.update_document("missing", name="x.pdf") is None
+
+
+def test_update_document_404_is_business_rejection():
+    store = FakeStore(error=ServiceError(404, NOT_FOUND_MSG, code="DOCUMENT_NOT_FOUND"))
+    controller = _controller(store)
+
+    with pytest.raises(BusinessRejection) as exc_info:
+        controller.update_document("missing", name="x.pdf")
+
+    assert exc_info.value.detail == NOT_FOUND_MSG
+    assert exc_info.value.status_code == 404
+    assert exc_info.value.kind == "NOT_FOUND"
+
+
+def test_update_document_other_service_error_is_pipeline_error():
+    store = FakeStore(error=ServiceError(409, "dup", code="DUPLICATE_DOCUMENT"))
+    controller = _controller(store)
+
+    with pytest.raises(PipelineError):
+        controller.update_document(DOCUMENT_ID, name="x.pdf")
+
+
+def test_update_document_upstream_error_propagates():
+    store = FakeStore(error=UpstreamError("store unreachable"))
+    controller = _controller(store)
+
+    with pytest.raises(UpstreamError) as exc_info:
+        controller.update_document(DOCUMENT_ID, name="x.pdf")
+
+    assert str(exc_info.value) == "store unreachable"

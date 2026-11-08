@@ -7,19 +7,17 @@ services:
         required: false
     networks:
       - pdf-extractext-network
+  
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=pdf-extractext-network"
       
-      - "traefik.http.routers.orchestrator.rule=Host(`orchestrator.localhost`) || Host(`localhost`) || Host(`127.0.0.1`)"
-      - "traefik.http.routers.orchestrator.entrypoints=web"
+      - "traefik.http.routers.orchestrator.rule=Host(`universidad.localhost`) || Host(`127.0.0.1`)"
+      
+      - "traefik.http.routers.orchestrator.entrypoints=websecure"
+      - "traefik.http.routers.orchestrator.tls=true"
+      
       - "traefik.http.routers.orchestrator.middlewares=orchestrator-retry@docker, orchestrator-cb@docker"
-      
-      - "traefik.http.routers.orchestrator-alias.rule=Host(`universidad.localhost`)"
-      - "traefik.http.routers.orchestrator-alias.entrypoints=websecure"
-      - "traefik.http.routers.orchestrator-alias.tls=true"
-      - "traefik.http.routers.orchestrator-alias.middlewares=orchestrator-retry@docker, orchestrator-cb@docker"
-      
       - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
 
       - "traefik.http.middlewares.orchestrator-retry.retry.attempts=3"
