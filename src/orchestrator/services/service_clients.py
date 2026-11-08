@@ -1,5 +1,4 @@
 import base64
-import time
 from collections.abc import Callable
 from typing import Any
 
@@ -51,10 +50,9 @@ class ServiceClient:
         if response.status_code >= 400:
             detail, code = _error_fields(response)
             raise ServiceError(response.status_code, detail, code)
+        if response.status_code == 204:
+            return None
         return response.json()
-
-    def _retry_delay(self, attempt: int) -> float:
-        return self._settings.http_retry_backoff * 2**attempt
 
 
 class ValidatorClient:
@@ -120,6 +118,41 @@ class StoreClient:
         return self._client.request(
             "GET", f"{self._base_url.resolve()}{_API_PREFIX}/documents"
         )
+
+    def update_by_id(
+        self,
+        doc_id: str,
+        name: str | None = None,
+        text: str | None = None,
+        size: int | None = None,
+    ) -> dict[str, Any] | None:
+        payload = {
+            key: value
+            for key, value in (("name", name), ("text", text), ("size", size))
+            if value is not None
+        }
+        try:
+            return self._client.request(
+                "PATCH",
+                f"{self._base_url.resolve()}{_API_PREFIX}/documents/{doc_id}",
+                json=payload,
+            )
+        except ServiceError as exc:
+            if exc.status_code == 404 and exc.code == "DOCUMENT_NOT_FOUND":
+                return None
+            raise
+
+    def delete_by_id(self, doc_id: str) -> bool:
+        try:
+            self._client.request(
+                "DELETE",
+                f"{self._base_url.resolve()}{_API_PREFIX}/documents/{doc_id}",
+            )
+            return True
+        except ServiceError as exc:
+            if exc.status_code == 404 and exc.code == "DOCUMENT_NOT_FOUND":
+                return False
+            raise
 
     def _resolve_duplicate(self, checksum: str) -> dict[str, Any]:
         try:

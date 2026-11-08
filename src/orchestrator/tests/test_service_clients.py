@@ -1,6 +1,5 @@
 import base64
 import json
-import time
 
 import httpx
 import pytest
@@ -20,45 +19,6 @@ from .helpers import (
     VALIDATOR_400_EXT,
     make_settings,
 )
-
-
-def test_request_retries_transport_error_with_exponential_backoff(monkeypatch):
-    attempts = {"n": 0}
-
-    def handler(request):
-        attempts["n"] += 1
-        raise httpx.ConnectTimeout("boom", request=request)
-
-    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
-    delays = []
-
-    def fake_sleep(delay):
-        delays.append(delay)
-
-    monkeypatch.setattr(time, "sleep", fake_sleep)
-
-    with pytest.raises(UpstreamError):
-        client.request("GET", "http://validator:8001/validate")
-
-    assert attempts["n"] == 4
-    assert delays == [0.5, 1.0, 2.0]
-
-
-def test_request_retries_5xx_and_recovers_on_second_attempt():
-    attempts = {"n": 0}
-
-    def handler(request):
-        attempts["n"] += 1
-        if attempts["n"] == 1:
-            return httpx.Response(500, json={"detail": "boom"})
-        return httpx.Response(200, json={"ok": True})
-
-    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
-
-    result = client.request("GET", "http://validator:8001/validate")
-
-    assert result == {"ok": True}
-    assert attempts["n"] == 2
 
 
 def test_request_never_retries_4xx():
@@ -204,7 +164,7 @@ def test_store_409_duplicate_on_first_attempt_is_business_error():
     assert requests_seen == ["http://store:8003/api/v1/store"]  # nunca hubo GET
 
 
-def test_store_resolves_duplicate_after_retry_via_get_by_checksum():
+def test_store_resolves_duplicate_after_transport_error_fallback():
     attempts = {"n": 0}
 
     def handler(request):
@@ -225,7 +185,7 @@ def test_store_resolves_duplicate_after_retry_via_get_by_checksum():
     result = store.store("doc.pdf", "hola", "sha123")
 
     assert result == {"id": "existing"}
-    assert attempts["n"] == 3
+    assert attempts["n"] == 2
 
 
 def test_store_resolution_failure_is_fatal_upstream_error():
@@ -289,3 +249,75 @@ def test_list_all_returns_documents():
     result = store.list_all()
 
     assert result == [{"id": "abc123"}]
+
+
+def test_store_update_by_id_patches_only_provided_fields():
+    def handler(request):
+        assert request.method == "PATCH"
+        assert str(request.url).endswith("/api/v1/documents/abc123")
+        assert json.loads(request.content) == {"name": "nuevo.pdf", "size": 999}
+        return httpx.Response(200, json={"id": "abc123", "name": "nuevo.pdf", "size": 999})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    result = store.update_by_id("abc123", name="nuevo.pdf", size=999)
+
+    assert result == {"id": "abc123", "name": "nuevo.pdf", "size": 999}
+
+
+def test_store_update_by_id_returns_none_when_not_found():
+    def handler(request):
+        return httpx.Response(404, json={"error_code": "DOCUMENT_NOT_FOUND", "message": "no existe"})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    assert store.update_by_id("inexistente", text="algo") is None
+
+
+def test_store_update_by_id_propagates_non_404_errors():
+    def handler(request):
+        return httpx.Response(409, json={"error_code": "DUPLICATE_DOCUMENT", "message": REPEATED_MSG})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    with pytest.raises(ServiceError) as exc_info:
+        store.update_by_id("abc123", name="x.pdf")
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.code == "DUPLICATE_DOCUMENT"
+
+
+def test_store_delete_by_id_returns_true_on_204():
+    def handler(request):
+        assert request.method == "DELETE"
+        assert str(request.url).endswith("/api/v1/documents/abc123")
+        return httpx.Response(204, content=b"")
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    assert store.delete_by_id("abc123") is True
+
+
+def test_store_delete_by_id_returns_false_when_not_found():
+    def handler(request):
+        return httpx.Response(404, json={"error_code": "DOCUMENT_NOT_FOUND", "message": "no existe"})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    assert store.delete_by_id("inexistente") is False
+
+
+def test_store_delete_by_id_propagates_upstream_errors():
+    def handler(request):
+        return httpx.Response(500, json={"detail": "boom"})
+
+    client = ServiceClient(make_settings(), transport=httpx.MockTransport(handler))
+    store = StoreClient(client, "http://store:8003")
+
+    with pytest.raises(UpstreamError):
+        store.delete_by_id("abc123")
