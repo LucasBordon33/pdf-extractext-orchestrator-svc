@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any, Protocol
 
 from orchestrator.config import Settings
+from orchestrator.constants import OVERSIZE_DETAIL
 from orchestrator.exceptions import (
     BusinessRejection,
     PipelineError,
@@ -13,8 +14,7 @@ from orchestrator.exceptions import (
 )
 from orchestrator.models.pdf import PDF
 from orchestrator.models.pipeline import PipelineResult, StageStatus
-
-OVERSIZE_DETAIL = "El archivo excede el tamaño permitido"
+from orchestrator.services.service_errors import handle_service_errors, map_store_error
 
 _VALIDATE_STAGE = "validate"
 _EXTRACT_STAGE = "extract"
@@ -56,9 +56,12 @@ def _rejection_from_extractor(exc: ServiceError) -> Exception:
 
 
 def _rejection_from_store(exc: ServiceError) -> Exception:
-    if exc.code == "DUPLICATE_DOCUMENT" or exc.status_code == 409:
-        return BusinessRejection(exc.detail, "DUPLICATE_DOCUMENT", 400)
-    return PipelineError(exc.detail)
+    return map_store_error(
+        exc,
+        duplicate_kind="DUPLICATE_DOCUMENT",
+        duplicate_status=409,
+        rejection_status=400,
+    )
 
 
 class UploadController:
@@ -94,24 +97,20 @@ class UploadController:
 
     def _run_validate(self, content: bytes, name: str, result: PipelineResult) -> None:
         stage = result.start_stage(_VALIDATE_STAGE)
-        try:
-            outcome = self._validator.validate(content, name)
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_validator(exc) from exc
+        outcome = handle_service_errors(
+            lambda: self._validator.validate(content, name),
+            _rejection_from_validator,
+        )
         if not outcome.get("valid", False):
             raise BusinessRejection(str(outcome.get("reason", "")), "VALIDATION_ERROR", 400)
         result.finish_stage(stage, StageStatus.SUCCEEDED)
 
     def _run_extract(self, content: bytes, name: str, result: PipelineResult) -> str:
         stage = result.start_stage(_EXTRACT_STAGE)
-        try:
-            payload = self._extractor.extract(content, name)
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_extractor(exc) from exc
+        payload = handle_service_errors(
+            lambda: self._extractor.extract(content, name),
+            _rejection_from_extractor,
+        )
         result.finish_stage(stage, StageStatus.SUCCEEDED)
         return str(payload["content"])
 
@@ -119,11 +118,9 @@ class UploadController:
         self, name: str, text: str, checksum: str, size: int, result: PipelineResult
     ) -> dict[str, Any]:
         stage = result.start_stage(_STORE_STAGE)
-        try:
-            stored = self._store.store(name, text, checksum, size)
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_store(exc) from exc
+        stored = handle_service_errors(
+            lambda: self._store.store(name, text, checksum, size),
+            _rejection_from_store,
+        )
         result.finish_stage(stage, StageStatus.SUCCEEDED)
         return stored

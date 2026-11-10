@@ -80,7 +80,7 @@ class ExtractorClient:
     def extract(self, content: bytes, filename: str) -> dict[str, Any]:
         return self._client.request(
             "POST",
-            f"{self._base_url.resolve()}/extract",
+            f"{self._base_url.resolve()}/api/v1/extract",
             content=content,
             headers={"Content-Type": "application/pdf"},
         )

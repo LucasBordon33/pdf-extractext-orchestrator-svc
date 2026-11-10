@@ -8,13 +8,15 @@
  *
  * Ejecucion:
  *   k6 run src/orchestrator/tests/stress/spike.js
- *   k6 run -e BASE_URL=http://localhost:8000 -e MAX_P95=9000 src/orchestrator/tests/stress/spike.js
- */
-
+ *   k6 run -e BASE_URL=https://localhost:443 -e MAX_P95=9000 src/orchestrator/tests/stress/spike.js
+ *
+ * Si Traefik usa un certificado autofirmado, forzar:
+ *   K6_INSECURE_SKIP_TLS_VERIFY=true k6 run ...
+*/
 import http from 'k6/http';
 import { check } from 'k6';
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8000';
+const BASE_URL = __ENV.BASE_URL || 'https://localhost:443';
 const UPLOAD_PATH = __ENV.UPLOAD_PATH || '/api/v1/upload';
 
 export const options = {

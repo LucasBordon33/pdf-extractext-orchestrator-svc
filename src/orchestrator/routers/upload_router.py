@@ -5,10 +5,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Request, UploadFile
 from fastapi.responses import JSONResponse
 
+from orchestrator.constants import UPLOAD_OK_MESSAGE
 from orchestrator.controllers.upload_controller import UploadController
 from orchestrator.views.success_view import created_response
-
-UPLOAD_OK_MESSAGE = "PDF subido correctamente"
 
 router = APIRouter()
 

@@ -2,8 +2,9 @@
 
 from typing import Any, Protocol
 
-from orchestrator.exceptions import BusinessRejection, PipelineError, ServiceError, UpstreamError
+from orchestrator.exceptions import ServiceError
 from orchestrator.models.pdf import PDF
+from orchestrator.services.service_errors import handle_service_errors, map_store_error
 
 
 class StoreReadPort(Protocol):
@@ -21,9 +22,7 @@ class StoreReadPort(Protocol):
 
 
 def _rejection_from_store(exc: ServiceError) -> Exception:
-    if exc.status_code == 404:
-        return BusinessRejection(exc.detail, "NOT_FOUND", 404)
-    return PipelineError(exc.detail)
+    return map_store_error(exc, not_found_status=404)
 
 
 class DocumentController:
@@ -33,30 +32,24 @@ class DocumentController:
         self._store = store
 
     def get_document(self, doc_id: str) -> PDF:
-        try:
-            payload = self._store.get_by_id(doc_id)
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_store(exc) from exc
+        payload = handle_service_errors(
+            lambda: self._store.get_by_id(doc_id),
+            _rejection_from_store,
+        )
         return _to_pdf(payload)
 
     def list_documents(self) -> list[PDF]:
-        try:
-            payloads = self._store.list_all()
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_store(exc) from exc
+        payloads = handle_service_errors(
+            lambda: self._store.list_all(),
+            _rejection_from_store,
+        )
         return [_to_pdf(payload) for payload in payloads]
 
     def delete_document(self, doc_id: str) -> bool:
-        try:
-            return self._store.delete_by_id(doc_id)
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_store(exc) from exc
+        return handle_service_errors(
+            lambda: self._store.delete_by_id(doc_id),
+            _rejection_from_store,
+        )
 
     def update_document(
         self,
@@ -65,12 +58,10 @@ class DocumentController:
         text: str | None = None,
         size: int | None = None,
     ) -> PDF | None:
-        try:
-            payload = self._store.update_by_id(doc_id, name=name, text=text, size=size)
-        except UpstreamError:
-            raise
-        except ServiceError as exc:
-            raise _rejection_from_store(exc) from exc
+        payload = handle_service_errors(
+            lambda: self._store.update_by_id(doc_id, name=name, text=text, size=size),
+            _rejection_from_store,
+        )
         if payload is None:
             return None
         return _to_pdf(payload)

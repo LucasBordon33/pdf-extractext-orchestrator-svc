@@ -1,6 +1,8 @@
 services:
   orchestrator:
-    build: .
+    build:
+      context: .
+    image: pdf-orchestrator-service:1.0.0
     restart: unless-stopped
     env_file: 
       - path: .env
@@ -8,23 +10,30 @@ services:
     networks:
       - pdf-extractext-network
   
+    
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=pdf-extractext-network"
       
       - "traefik.http.routers.orchestrator.rule=Host(`universidad.localhost`) || Host(`127.0.0.1`)"
-      
       - "traefik.http.routers.orchestrator.entrypoints=websecure"
       - "traefik.http.routers.orchestrator.tls=true"
       
-      - "traefik.http.routers.orchestrator.middlewares=orchestrator-retry@docker, orchestrator-cb@docker"
       - "traefik.http.services.orchestrator.loadbalancer.server.port=8000"
 
+      - "traefik.http.routers.orchestrator.middlewares=orchestrator-rl@docker, orchestrator-retry@docker, orchestrator-cb@docker"
+      
+      - "traefik.http.middlewares.orchestrator-rl.ratelimit.average=10"
+      - "traefik.http.middlewares.orchestrator-rl.ratelimit.burst=25"
+      
       - "traefik.http.middlewares.orchestrator-retry.retry.attempts=3"
       - "traefik.http.middlewares.orchestrator-retry.retry.initialinterval=100ms"
+      
       - "traefik.http.middlewares.orchestrator-cb.circuitbreaker.expression=NetworkErrorRatio() > 0.2 || ResponseCodeRatio(500, 600, 0, 600) > 0.2"
       - "traefik.http.middlewares.orchestrator-cb.circuitbreaker.checkperiod=10s"
       - "traefik.http.middlewares.orchestrator-cb.circuitbreaker.fallbackduration=15s"
+
+
 
 networks:
   pdf-extractext-network:

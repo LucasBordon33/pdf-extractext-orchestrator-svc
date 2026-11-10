@@ -13,7 +13,7 @@
 # =============================================================================
 set -euo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8000}"
+BASE_URL="${BASE_URL:-https://localhost:443}"
 RESULTS_DIR="src/orchestrator/tests/stress/results"
 PDF_FILES="${PDF_FILES:-prueba.pdf}"
 READY_ATTEMPTS="${READY_ATTEMPTS:-60}"
@@ -30,7 +30,7 @@ sleep 10
 echo "== Esperando servicio healthy en $BASE_URL/health (max ${READY_ATTEMPTS}s) =="
 ready=0
 for i in $(seq 1 "$READY_ATTEMPTS"); do
-  health_ok=$(curl -fs -o /dev/null -w "%{http_code}" "$BASE_URL/health" || true)
+  health_ok=$(curl -kfsL -o /dev/null -w "%{http_code}" "$BASE_URL/health" || true)
   if [ "$health_ok" = "200" ]; then
     ready=1
     echo "   listo tras ${i}s extra: proxy 200"

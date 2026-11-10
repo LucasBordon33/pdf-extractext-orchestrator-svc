@@ -85,7 +85,7 @@ def test_validator_client_400_raises_business_error():
 def test_extractor_client_sends_raw_pdf_bytes():
     def handler(request):
         assert request.method == "POST"
-        assert str(request.url).endswith("/extract")
+        assert str(request.url).endswith("/api/v1/extract")
         assert request.headers["content-type"] == "application/pdf"
         assert request.content == DEFAULT_CONTENT
         return httpx.Response(200, json={"content": "texto extraido", "page_count": 1})

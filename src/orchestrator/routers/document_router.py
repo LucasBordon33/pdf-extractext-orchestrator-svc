@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from orchestrator.controllers.document_controller import DocumentController
 from orchestrator.infrastructure.consul.discovery import fallback_active_for, fallback_services
 from orchestrator.views.document_view import document_list_response, document_response
+from orchestrator.views.error_view import error_response
 
 router = APIRouter()
 
@@ -29,14 +30,6 @@ def get_document_controller(request: Request) -> DocumentController:
 DocumentControllerDep = Annotated[DocumentController, Depends(get_document_controller)]
 
 
-def _error_response(status_code: int, error_code: str, message: str) -> JSONResponse:
-    """Respuesta de error con el mismo envelope que MS4."""
-    return JSONResponse(
-        status_code=status_code,
-        content={"error_code": error_code, "message": message},
-    )
-
-
 @router.get("/api/v1/documents")
 def list_documents(controller: DocumentControllerDep) -> JSONResponse:
     """Lista todos los documentos almacenados."""
@@ -54,7 +47,7 @@ def delete_document(doc_id: str, controller: DocumentControllerDep) -> Response:
     """Elimina un documento por su id; 204 si se borró, 404 si no existía."""
     deleted = controller.delete_document(doc_id)
     if not deleted:
-        return _error_response(404, "DOCUMENT_NOT_FOUND", NOT_FOUND_BY_ID_MESSAGE)
+        return error_response(404, NOT_FOUND_BY_ID_MESSAGE)
     return Response(status_code=204)
 
 
@@ -67,7 +60,7 @@ def update_document(
         doc_id, name=payload.name, text=payload.text, size=payload.size
     )
     if pdf is None:
-        return _error_response(404, "DOCUMENT_NOT_FOUND", NOT_FOUND_BY_ID_MESSAGE)
+        return error_response(404, NOT_FOUND_BY_ID_MESSAGE)
     return document_response(pdf)
 
 

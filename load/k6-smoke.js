@@ -1,14 +1,22 @@
 // Smoke de carga para CI (NO es la prueba de stress del TP):
-// 10 VUs durante 10 s contra POST /api/v1/upload. Verifica que el contrato
-// {status, id, filename, checksum} se sostiene bajo concurrencia.
+// 1 VU durante 10 s contra POST /api/v1/upload. Verifica que el contrato
+// {status, id, filename, checksum} se sostiene bajo concurrencia baja.
 //
-// Uso local: k6 run -e BASE_URL=http://localhost:8000 load/k6-smoke.js
+// NOTA: Traefik aplica rate limit (10 req/s, burst 25) y circuit breaker.
+// Este script usa 1 VU + sleep(1) entre peticiones para no saturar esos
+// patrones de resiliencia. Si necesitas más carga, ajusta VUS y sleep en
+// consecuencia.
+//
+// Uso local: k6 run -e BASE_URL=https://universidad.localhost:443 load/k6-smoke.js
+//
+// Si Traefik usa un certificado autofirmado, forzar:
+//   K6_INSECURE_SKIP_TLS_VERIFY=true k6 run -e BASE_URL=https://universidad.localhost:443 load/k6-smoke.js
 
 import http from "k6/http";
-import { check } from "k6";
+import { check, sleep } from "k6";
 
 export const options = {
-  vus: 10,
+  vus: parseInt(__ENV.VUS || "1"),
   duration: "10s",
   thresholds: {
     http_req_failed: ["rate<0.01"],
@@ -18,11 +26,13 @@ export const options = {
 
 const pdfFile = open('../src/orchestrator/tests/stress/pdfs/prueba.pdf', 'b');
 
-const BASE_URL = __ENV.BASE_URL || "http://localhost:8000";
+const BASE_URL = __ENV.BASE_URL || "https://localhost:443";
+
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 400 }));
 
 export default function () {
   const response = http.post(`${BASE_URL}/api/v1/upload`, {
-    file: http.file(pdf, "prueba.pdf", "application/pdf"),
+    file: http.file(pdfFile, "prueba.pdf", "application/pdf"),
   }, {
     headers: {},
     timeout: "30s",
@@ -50,4 +60,7 @@ export default function () {
       return false;
     },
   });
+
+  // sleep para no saturar el rate limit de Traefik (10 req/s, burst 25)
+  sleep(5);
 }

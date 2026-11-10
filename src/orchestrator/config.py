@@ -20,8 +20,6 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     http_timeout: float = 30.0
-    http_retries: int = 3
-    http_retry_backoff: float = 0.5
     max_upload_size: int = 10 * 1024 * 1024
 
     validator_service_url: str = "http://validator:8001"

@@ -1,5 +1,6 @@
 import hashlib
 
+from orchestrator import constants
 from orchestrator.config import Settings
 
 DEFAULT_CONTENT = b"%PDF-1.4 hola contenido"
@@ -7,11 +8,12 @@ DEFAULT_CHECKSUM = hashlib.sha256(DEFAULT_CONTENT).hexdigest()
 
 VALIDATOR_400_EXT = "Solo se permiten archivos PDF"
 VALIDATOR_400_HEADER = "El archivo no es un PDF válido"
-OVERSIZE_MSG = "El archivo excede el tamaño permitido"
 EXTRACTION_422 = "No se pudo leer el archivo como PDF"
 REPEATED_MSG = "El PDF ya se encuentra repetido en la base de datos."
 NOT_FOUND_MSG = "Documento no encontrado"
-UPLOAD_OK_MSG = "PDF subido correctamente"
+
+OVERSIZE_MSG = constants.OVERSIZE_DETAIL
+UPLOAD_OK_MSG = constants.UPLOAD_OK_MESSAGE
 
 DUPLICATE_CODE = "DUPLICATE_DOCUMENT"
 
@@ -28,8 +30,6 @@ DOCUMENT_PAYLOAD = {
 
 def make_settings(**overrides):
     defaults = {
-        "http_retries": 3,
-        "http_retry_backoff": 0.5,
         "http_timeout": 5.0,
         "max_upload_size": 10 * 1024 * 1024,
         "validator_service_url": "http://validator:8001",
