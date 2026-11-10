@@ -39,7 +39,8 @@ jobs:
 
       - name: Levantar el servicio y esperar el healthcheck
         run: |
-          docker run -d --name svc -p 8000:8000 \
+          docker network create ci-net
+          docker run -d --name svc --network ci-net -p 8000:8000 \
             -e UVICORN_WORKERS=1 \
             orchestrator-service:ci
           for i in $(seq 1 30); do
@@ -53,7 +54,7 @@ jobs:
         with:
           filename: load/k6-smoke.js
         env:
-          BASE_URL: http://host.docker.internal:8000
+          BASE_URL: http://svc:8000
           K6_INSECURE_SKIP_TLS_VERIFY: "true"
 
       - name: Logs del servicio (solo si el smoke falla)
