@@ -28,6 +28,8 @@ const pdfFile = open('../src/orchestrator/tests/stress/pdfs/prueba.pdf', 'b');
 
 const BASE_URL = __ENV.BASE_URL || "https://localhost:443";
 
+const UPLOAD_PATH = __ENV.UPLOAD_PATH || '/health';
+
 http.setResponseCallback(http.expectedStatuses({ min: 200, max: 400 }));
 
 export default function () {
