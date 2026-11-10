@@ -50,12 +50,13 @@ jobs:
           echo "el servicio no levantó en 30 s" && exit 1
 
       - name: Smoke k6 (contrato bajo concurrencia)
-        uses: grafana/k6-action@v0.3.1
-        with:
-          filename: load/k6-smoke.js
-        env:
-          BASE_URL: http://svc:8000
-          K6_INSECURE_SKIP_TLS_VERIFY: "true"
+        run: |
+          docker run --rm --network ci-net \
+            -v /github/workspace:/workspace:ro \
+            -w /workspace \
+            -e BASE_URL=http://svc:8000 \
+            -e K6_INSECURE_SKIP_TLS_VERIFY="true" \
+            grafana/k6:latest run load/k6-smoke.js
 
       - name: Logs del servicio (solo si el smoke falla)
         if: failure()
