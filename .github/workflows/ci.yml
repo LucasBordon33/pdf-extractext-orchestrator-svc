@@ -52,7 +52,7 @@ jobs:
       - name: Smoke k6 (contrato bajo concurrencia)
         run: |
           docker run --rm --network ci-net \
-            -v /github/workspace:/workspace:ro \
+            -v "${GITHUB_WORKSPACE}:/workspace:ro" \
             -w /workspace \
             -e BASE_URL=http://svc:8000 \
             -e K6_INSECURE_SKIP_TLS_VERIFY="true" \
